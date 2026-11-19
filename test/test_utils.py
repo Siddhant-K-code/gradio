@@ -1152,3 +1152,41 @@ class TestSafeAcloseIterator:
         # After aclose, async generator should raise StopAsyncIteration
         with pytest.raises(StopAsyncIteration):
             await ag.__anext__()
+
+
+def test_safe_get_lock_and_stop_event_do_not_create_event_loops():
+    # Run in a fresh non-main thread with no event loop, as in reload mode.
+    # See https://github.com/gradio-app/gradio/issues/12699
+    import asyncio
+    import threading
+
+    from gradio.utils import safe_get_lock, safe_get_stop_event
+
+    errors = []
+
+    def target():
+        try:
+            with patch(
+                "asyncio.new_event_loop", wraps=asyncio.new_event_loop
+            ) as new_loop:
+                lock = safe_get_lock()
+                event = safe_get_stop_event()
+                with gr.Blocks() as demo:
+                    gr.Textbox()
+                demo.queue()
+                assert new_loop.call_count == 0
+
+            async def use():
+                async with lock:
+                    event.set()
+                    await event.wait()
+
+            asyncio.run(use())
+        except BaseException as e:
+            errors.append(e)
+
+    thread = threading.Thread(target=target)
+    thread.start()
+    thread.join()
+    if errors:
+        raise errors[0]

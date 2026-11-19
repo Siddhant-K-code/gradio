@@ -113,25 +113,20 @@ def get_package_version() -> str:
 
 
 def safe_get_lock() -> asyncio.Lock:
-    """Get asyncio.Lock() without fear of getting an Exception.
+    """Get an asyncio.Lock() that is safe to create outside a running event loop,
+    e.g. when the Blocks object is imported outside the main thread in reload mode.
 
-    Needed because in reload mode we import the Blocks object outside
-    the main thread.
+    Since Python 3.10, asyncio primitives bind to the running loop lazily on first
+    use, so no event loop needs to exist at construction time. Creating one here
+    would leak a loop each time this is called.
     """
-    try:
-        loop = asyncio.get_running_loop()
-    except RuntimeError:
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
     return asyncio.Lock()
 
 
 def safe_get_stop_event() -> asyncio.Event:
-    try:
-        loop = asyncio.get_running_loop()
-    except RuntimeError:
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
+    """Get an asyncio.Event() that is safe to create outside a running event loop.
+    See safe_get_lock() for details.
+    """
     return asyncio.Event()
 
 
